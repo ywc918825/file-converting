@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>高保真转换器</title>
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #f0f2f5; font-family: -apple-system, sans-serif; display: flex; justify-content: center; padding: 20px; min-height: 100vh; }
+    .container { width: 100%; max-width: 440px; background: #fff; border-radius: 24px; padding: 30px 24px; box-shadow: 0 12px 30px rgba(0,0,0,0.05); margin-top: 20px; }
+    h1 { text-align: center; font-size: 26px; color: #1e293b; margin-bottom: 24px; }
+    .upload-zone { border: 2px dashed #cbd5e1; border-radius: 16px; padding: 32px; text-align: center; cursor: pointer; margin-bottom: 20px; }
+    .upload-zone:active { border-color: #3b82f6; background: #eff6ff; }
+    .upload-icon { font-size: 38px; }
+    .upload-text { font-size: 16px; color: #334155; font-weight: 500; }
+    .upload-hint { font-size: 13px; color: #94a3b8; }
+    .format-row { display: flex; gap: 8px; margin-bottom: 20px; }
+    .format-btn { flex: 1; padding: 12px; border: none; border-radius: 12px; background: #f1f5f9; font-size: 14px; color: #475569; cursor: pointer; }
+    .format-btn.active { background: #2563eb; color: #fff; }
+    .progress-wrap { display: none; margin-bottom: 20px; }
+    .progress-bar { height: 8px; background: #e2e8f0; border-radius: 10px; overflow: hidden; }
+    .progress-fill { height: 100%; width: 0; background: #2563eb; transition: width 0.3s; }
+    .progress-info { display: flex; justify-content: space-between; margin-top: 8px; font-size: 13px; color: #64748b; }
+    .btn { width: 100%; padding: 16px; border: none; border-radius: 14px; font-size: 17px; font-weight: 600; cursor: pointer; margin-bottom: 10px; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:disabled { background: #94a3b8; opacity: 0.6; }
+    .btn-download { background: #10b981; display: none; }
+    .error { color: #dc2626; font-size: 13px; text-align: center; margin-top: 8px; }
+    .note { margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 13px; color: #64748b; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>📄 高保真转换器</h1>
+
+  <div class="upload-zone" id="uploadZone">
+    <div class="upload-icon">📂</div>
+    <div class="upload-text" id="fileNameDisplay">点击或拖拽上传文件</div>
+    <div class="upload-hint">任意文件，手机可选相册/文件</div>
+  </div>
+  <!-- 接受所有文件 -->
+  <input type="file" id="fileInput" hidden accept="*/*">
+
+  <div class="format-row">
+    <button class="format-btn active" data-format="docx">📝 Word</button>
+    <button class="format-btn" data-format="pdf">📄 PDF</button>
+    <button class="format-btn" data-format="txt">📃 TXT</button>
+    <button class="format-btn" data-format="pptx">📊 PPT</button>
+  </div>
+
+  <div class="progress-wrap" id="progressWrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-info">
+      <span id="progressLabel">上传中...</span>
+      <span id="progressPercent">0%</span>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" id="convertBtn" disabled>🚀 开始转换</button>
+  <button class="btn btn-download" id="downloadBtn">⬇️ 下载结果</button>
+  <div class="error" id="errorMsg"></div>
+
+  <div class="note">⚡ 密钥内置，每天免费 250 次转换</div>
+</div>
+
+<script>
+  (function() {
+    const PROXY_API = '/api/convert';
+
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileNameDisplay = document.getElementById('fileNameDisplay');
+    const convertBtn = document.getElementById('convertBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const progressWrap = document.getElementById('progressWrap');
+    const progressFill = document.getElementById('progressFill');
+    const progressLabel = document.getElementById('progressLabel');
+    const progressPercent = document.getElementById('progressPercent');
+    const errorMsg = document.getElementById('errorMsg');
+
+    let selectedFile = null;
+    let targetFormat = 'docx';
+
+    uploadZone.addEventListener('click', () => fileInput.click());
+    uploadZone.addEventListener('dragover', e => e.preventDefault());
+    uploadZone.addEventListener('drop', e => {
+      e.preventDefault();
+      handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => handleFile(e.target.files[0]));
+
+    function handleFile(file) {
+      if (!file) return;
+      if (file.size > 50 * 1024 * 1024) {
+        errorMsg.textContent = '文件不能超过 50MB';
+        return;
+      }
+      selectedFile = file;
+      fileNameDisplay.textContent = file.name;
+      convertBtn.disabled = false;
+      resetUI();
+    }
+
+    document.querySelectorAll('.format-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        targetFormat = this.dataset.format;
+      });
+    });
+
+    convertBtn.addEventListener('click', startConvert);
+
+    function resetUI() {
+      progressWrap.style.display = 'none';
+      downloadBtn.style.display = 'none';
+      convertBtn.style.display = 'block';
+      errorMsg.textContent = '';
+      updateProgress(0, '');
+    }
+
+    function updateProgress(percent, label) {
+      progressFill.style.width = percent + '%';
+      progressPercent.textContent = percent + '%';
+      if (label) progressLabel.textContent = label;
+    }
+
+    async function startConvert() {
+      if (!selectedFile) return;
+
+      convertBtn.disabled = true;
+      progressWrap.style.display = 'block';
+      downloadBtn.style.display = 'none';
+      errorMsg.textContent = '';
+
+      try {
+        updateProgress(5, '正在上传文件...');
+
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('targetFormat', targetFormat);
+
+        const res = await fetch(PROXY_API, { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '转换失败');
+
+        updateProgress(100, '转换完成！');
+        convertBtn.style.display = 'none';
+        downloadBtn.style.display = 'block';
+
+        // ✅ 关键改动：直接打开下载链接，即时响应
+        downloadBtn.onclick = () => {
+          window.open(data.downloadUrl, '_blank');
+        };
+      } catch (err) {
+        console.error(err);
+        errorMsg.textContent = '转换失败: ' + err.message;
+        updateProgress(0, '');
+        convertBtn.disabled = false;
+      }
+    }
+  })();
+</script>
+</body>
+</html>
