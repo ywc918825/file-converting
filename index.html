@@ -39,7 +39,6 @@
     <div class="upload-text" id="fileNameDisplay">点击或拖拽上传文件</div>
     <div class="upload-hint">任意文件，手机可选相册/文件</div>
   </div>
-  <!-- 接受所有文件 -->
   <input type="file" id="fileInput" hidden accept="*/*">
 
   <div class="format-row">
@@ -149,9 +148,20 @@
         convertBtn.style.display = 'none';
         downloadBtn.style.display = 'block';
 
-        // ✅ 关键改动：直接打开下载链接，即时响应
+        // 从 base64 直接构造文件并下载，自定义文件名
         downloadBtn.onclick = () => {
-          window.open(data.downloadUrl, '_blank');
+          const byteCharacters = atob(data.fileBase64);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray]);
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = data.fileName;
+          a.click();
+          URL.revokeObjectURL(a.href);
         };
       } catch (err) {
         console.error(err);
